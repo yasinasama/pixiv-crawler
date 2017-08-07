@@ -1,17 +1,16 @@
 import requests
 from bs4 import BeautifulSoup
 import re
+import os
 
 
-header = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.109 Safari/537.36   '
-}
+def getRequest(req, url, headers, stream=False):
+    return req.get(url=url, headers=headers, stream=stream) if req else requests.get(url=url, headers=headers, stream=stream)
 
-params = {
-    # 'lang': 'zh',
-    # 'source': 'pc',
-    # 'view_type': 'page',
-    'Referer': 'https://www.pixiv.net/'
+
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.109 Safari/537.36',
+    'Referer': ''
 }
 
 data = {
@@ -25,39 +24,55 @@ data = {
     'post_key': ''
 }
 
-# 国际排行榜URL
-RANK_AREA = 'https://www.pixiv.net/ranking.php?mode=monthly'
+# 需要抓取的URL
+Crawl_Url = 'https://www.pixiv.net/ranking.php?mode=monthly'
 
 # 获取session实例
 p = requests.Session()
 
 # 获取post请求必要数据
-p.headers = header
-r = p.get(url='https://accounts.pixiv.net/login', params=params)
+p.headers = headers
+r = getRequest(req=p, url='https://accounts.pixiv.net/login', headers=headers)
 parrern = re.compile(r'name="post_key" value="(.*?)">')
 res = parrern.search(r.text)
 data['post_key'] = res.group()
 
 # post请求模拟登陆
-p.post(url='https://accounts.pixiv.net/api/login', data=data)
-result = p.get(url=RANK_AREA)
+t = p.post(url='https://accounts.pixiv.net/api/login', data=data)
+result = getRequest(req=p, url=Crawl_Url, headers=headers)
 
-
+# 获取我们分析的主要的DOM节点信息
 soup = BeautifulSoup(result.text, "html.parser")
 items = soup.find_all(class_='ranking-item')
 items_length = len(items)
-old_jpgs = [items[i].find('img').get('data-src') for i in range(items_length)]
-new_jpgs = [jpg.replace(r'c/240x480/img-master', 'img-original').replace('_master1200','') for jpg in old_jpgs]
-new_pngs = [jpg.replace('jpg', 'png') for jpg in new_jpgs]
-[print(jpg) for jpg in new_jpgs]
+
+re_download_name = re.compile('(\d+)')
+
+for i in range(5):
+    image_url = 'https://www.pixiv.net' + items[i].find(class_='ranking-image-item').a.get('href')
+
+    small_jpg_url = items[i].find('img').get('data-src')
+
+    large_jpg_url = small_jpg_url.replace(r'c/240x480/img-master', 'img-original').replace('_master1200', '')
+    large_png_url = large_jpg_url.replace('jpg', 'png')
+
+    download_name = re.search(re_download_name, image_url).group()+'.jpg'
+
+    headers['Referer'] = image_url
+
+    jpg = getRequest(req=p, url=large_jpg_url, headers=headers, stream=True)
+    png = getRequest(req=p, url=large_png_url, headers=headers, stream=True)
+    with open(download_name, 'wb') as f:
+        if jpg.status_code == 200:
+            print('get it JPG!')
+            f.write(jpg.content)
+        elif png.status_code == 200:
+            print('get it PNG!')
+            f.write(png.content)
+        else:
+            print('NOT FOUND')
 
 
-print(requests.get('https://i.pximg.net/img-original/img/2017/08/05/20/04/20/64239362_p0.png', params=params).status_code)
-for i in range(3):
-    # print(p.get('https://i.pximg.net/img-original/img/2017/08/05/20/04/20/64239362_p0.png', params=params).status_code)
-    if p.get(url=new_jpgs[i], params=params).status_code == '200':
-        print(new_jpgs[i]+' is JPG!')
-    elif p.get(url=new_pngs[i], params=params).status_code == '200':
-        print(new_pngs[i]+' is PNG!')
-    else:
-        print('NOT FOUND!')
+
+
+
