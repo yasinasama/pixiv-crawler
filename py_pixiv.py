@@ -4,10 +4,10 @@ import re
 import os
 from datetime import datetime
 
-
 CRAWL_Url = 'https://www.pixiv.net/ranking.php?mode=monthly'  # 需要抓取的URL
-DOWNLOAD_PATH = 'D:\pixiv'   # 图片存放地址
+DOWNLOAD_PATH = 'D:\pixiv'  # 图片存放地址
 
+re_filename = re.compile('(\d+)')
 
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.109 Safari/537.36',
@@ -56,6 +56,55 @@ def loginPixiv():
         print('模拟登陆失败......')
         raise
 
+
+def isSingleImage(imgdom):
+    return False if imgdom.find(class_='page-count') else True
+
+
+# 单张图片抓取
+def singleImageCrawl(small_jpg_url, filename):
+    downloadpath = downloadPath(DOWNLOAD_PATH)
+    large_jpg_url = small_jpg_url.replace('c/240x480/img-master', 'img-original').replace('_master1200', '')
+    large_png_url = large_jpg_url.replace('jpg', 'png')
+    print(large_jpg_url)
+    downloadImage(downloadpath, filename, large_jpg_url, large_png_url)
+
+
+# 多张图片抓取
+def manyImageCrawl(small_jpg_url, filename, imgdom):
+    downloadpath = downloadPath(DOWNLOAD_PATH)
+    page_count = imgdom.find(class_='page-count').span.text
+    for j in range(int(page_count)):
+        f = filename.replace('.', '-' + str(j) + '.')
+        p = '_p' + str(j) + '_'
+        large_jpg_url = small_jpg_url.replace('c/240x480/', '').replace('_p0_', p)
+        print(large_jpg_url)
+        large_png_url = large_jpg_url.replace('jpg', 'png')
+        downloadImage(downloadpath, f, large_jpg_url, large_png_url)
+
+
+# 图片下载
+def downloadImage(downloadpath, filename, jpgurl, pngurl):
+    fullpath = os.path.join(downloadpath, filename)
+    jpg = getRequest(req=login, url=jpgurl, headers=headers, stream=True)
+    png = getRequest(req=login, url=pngurl, headers=headers, stream=True)
+
+    with open(fullpath, 'wb') as f:
+        if jpg.status_code == 200:
+            print('图片下载开始%s' % filename)
+            s = datetime.now()
+            f.write(jpg.content)
+            print('图片下载结束 , 耗时 %s 秒 , 文件大小 %s KB' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024)))
+        elif png.status_code == 200:
+            print('图片下载开始%s' % filename)
+            s = datetime.now()
+            f.write(png.content)
+            print('图片下载结束 , 耗时 %s 秒 , 文件大小 %s KB' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024)))
+        else:
+            print('图片下载出错!!!')
+
+
+# 登录
 login = loginPixiv()
 result = getRequest(req=login, url=CRAWL_Url, headers=headers)
 
@@ -64,42 +113,13 @@ soup = BeautifulSoup(result.text, "html.parser")
 items = soup.find_all(class_='ranking-item')
 items_length = len(items)
 
-re_filename = re.compile('(\d+)')
-downloadpath = downloadPath(DOWNLOAD_PATH)
-
 for i in range(10):
     image_url = 'https://www.pixiv.net' + items[i].find(class_='ranking-image-item').a.get('href')
+    small_jpg_url = items[i].find('img').get('data-src')
     headers['Referer'] = image_url
     filename = re.search(re_filename, image_url).group() + '.jpg'
-    fullpath = os.path.join(downloadpath, filename)
 
-    page_count = items[i].find(class_='page-count')
-    if page_count:
-
+    if isSingleImage(items[i]):
+        singleImageCrawl(small_jpg_url, filename)
     else:
-        small_jpg_url = items[i].find('img').get('data-src')
-
-        large_jpg_url = small_jpg_url.replace(r'c/240x480/img-master', 'img-original').replace('_master1200', '')
-        print(large_jpg_url)
-        large_png_url = large_jpg_url.replace('jpg', 'png')
-
-        jpg = getRequest(req=login, url=large_jpg_url, headers=headers, stream=True)
-        png = getRequest(req=login, url=large_png_url, headers=headers, stream=True)
-    with open(fullpath, 'wb') as f:
-        if jpg.status_code == 200:
-            print('抓取开始%s' % filename)
-            s = datetime.now()
-            f.write(jpg.content)
-            print('抓取完毕 , 耗时 %s 秒 , 文件大小 %s KB' % ((datetime.now()-s).seconds, int(os.path.getsize(fullpath)/1024)))
-        elif png.status_code == 200:
-            print('抓取开始%s' % filename)
-            s = datetime.now()
-            f.write(png.content)
-            print('抓取完毕 , 耗时 %s 秒 , 文件大小 %s KB' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath)/1024)))
-        else:
-            print('NOT FOUND')
-
-
-
-
-
+        manyImageCrawl(small_jpg_url, filename, items[i])
