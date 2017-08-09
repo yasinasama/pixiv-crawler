@@ -10,10 +10,25 @@ DOWNLOAD_PATH = 'D:\pixiv'  # 图片存放地址
 
 re_filename = re.compile('(\d+)')
 
+MODE_LIST = {
+    '1': 'daily',
+    '2': 'weekly',
+    '3': 'monthly',
+    '4': 'rookie',
+    '5': 'original',
+    '6': 'male',
+    '7': 'female'
+}
+
 # 防盗链
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.109 Safari/537.36',
     'Referer': ''
+}
+
+param = {
+    'mode': '',
+    'date': ''
 }
 # post请求内容
 data = {
@@ -61,6 +76,16 @@ def loginPixiv():
     except:
         print('模拟登陆失败......')
         raise
+
+
+def getCrawlUrl():
+    mode_input = input('请选择你感兴趣的(输入对应数字即可): 1 今日,2 本周,3 本月,4 新人,5 原创,6 受男性欢迎,7 受女性欢迎 ------------- ')
+    date = input('请输入日期:  例如20170808 -----------  ')
+    mode = MODE_LIST[mode_input]
+    url_list = []
+    for i in range(MAX_RANK_PAGE):
+        url_list.append('https://www.pixiv.net/ranking.php?mode=%s&date=%s&p=%s' % (mode, date, i + 1))
+    return url_list
 
 
 def isSingleImage(imgdom):
@@ -114,21 +139,21 @@ def downloadImage(downloadpath, filename, jpgurl, pngurl, login_req):
 
 # 登录
 login = loginPixiv()
-result = login.get(url=CRAWL_Url, headers=headers)
+list = getCrawlUrl()
+for url in list:
+    result = login.get(url=url, headers=headers)
+    # 获取我们分析的主要的DOM节点信息
+    soup = BeautifulSoup(result.text, "html.parser")
+    items = soup.find_all(class_='ranking-item')
+    items_length = len(items)
+    for i in range(1):
+        curr_dom = items[i]
+        image_url = 'https://www.pixiv.net' + curr_dom.find(class_='ranking-image-item').a.get('href')
+        small_jpg_url = curr_dom.find('img').get('data-src')
+        headers['Referer'] = image_url
+        filename = re.search(re_filename, image_url).group() + '.jpg'
 
-# 获取我们分析的主要的DOM节点信息
-soup = BeautifulSoup(result.text, "html.parser")
-items = soup.find_all(class_='ranking-item')
-items_length = len(items)
-
-for i in range(10):
-    curr_dom = items[i]
-    image_url = 'https://www.pixiv.net' + curr_dom.find(class_='ranking-image-item').a.get('href')
-    small_jpg_url = curr_dom.find('img').get('data-src')
-    headers['Referer'] = image_url
-    filename = re.search(re_filename, image_url).group() + '.jpg'
-
-    if isSingleImage(curr_dom):
-        singleImageCrawl(small_jpg_url, filename, login)
-    else:
-        manyImageCrawl(small_jpg_url, filename, curr_dom, login)
+        if isSingleImage(curr_dom):
+            singleImageCrawl(small_jpg_url, filename, login)
+        else:
+            manyImageCrawl(small_jpg_url, filename, curr_dom, login)
