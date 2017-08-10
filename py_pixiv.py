@@ -3,9 +3,12 @@ from bs4 import BeautifulSoup
 import re
 import os
 from datetime import datetime
+import threading
+
 
 MAX_RANK_PAGE = 10
-CRAWL_Url = 'https://www.pixiv.net/ranking.php?mode=daily&p=1'  # 需要抓取的URL
+MAX_EACH_PAGE = 1
+MAX_MANY_IMAGE_COUNT = 1
 DOWNLOAD_PATH = 'D:\pixiv'  # 图片存放地址
 
 re_filename = re.compile('(\d+)')
@@ -20,10 +23,12 @@ MODE_LIST = {
     '7': 'female'
 }
 
-# 防盗链
+# Referer防盗链
+# Range断点获取响应内容
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.109 Safari/537.36',
-    'Referer': ''
+    'Referer': '',
+    'Range': ''
 }
 
 param = {
@@ -79,13 +84,18 @@ def loginPixiv():
 
 
 def getCrawlUrl():
-    mode_input = input('请选择你感兴趣的(输入对应数字即可): 1 今日,2 本周,3 本月,4 新人,5 原创,6 受男性欢迎,7 受女性欢迎 ------------- ')
-    date = input('请输入日期:  例如20170808 -----------  ')
-    mode = MODE_LIST[mode_input]
-    url_list = []
-    for i in range(MAX_RANK_PAGE):
-        url_list.append('https://www.pixiv.net/ranking.php?mode=%s&date=%s&p=%s' % (mode, date, i + 1))
-    return url_list
+    while True:
+        mode_input = input('请选择你感兴趣的(输入对应数字即可): 1 今日,2 本周,3 本月,4 新人,5 原创,6 受男性欢迎,7 受女性欢迎 ------------- ')
+        date = input('请输入日期:  例如20170808 -----------  ')
+        today = datetime.strftime(datetime.date(datetime.now()), '%Y%m%d')
+        if date < today:
+            mode = MODE_LIST[mode_input]
+            url_list = []
+            for i in range(MAX_RANK_PAGE):
+                url_list.append('https://www.pixiv.net/ranking.php?mode=%s&date=%s&p=%s' % (mode, date, i + 1))
+            return url_list
+        else:
+            print('输入日期必须早于当前日期!!!!')
 
 
 def isSingleImage(imgdom):
@@ -106,6 +116,9 @@ def manyImageCrawl(small_jpg_url, filename, imgdom, login_req):
     downloadpath = downloadPath(DOWNLOAD_PATH)
     page_count = imgdom.find(class_='page-count').span.text
     for j in range(int(page_count)):
+        # 暂时不需要下载太多---------------------------------------------------------------
+        if j > MAX_MANY_IMAGE_COUNT:
+            break
         f = filename.replace('.', '-' + str(j) + '.')
         p = '_p' + str(j) + '_'
         large_jpg_url = small_jpg_url.replace(r'c/240x480/', '').replace('_p0_', p)
@@ -139,21 +152,72 @@ def downloadImage(downloadpath, filename, jpgurl, pngurl, login_req):
 
 # 登录
 login = loginPixiv()
-list = getCrawlUrl()
-for url in list:
-    result = login.get(url=url, headers=headers)
-    # 获取我们分析的主要的DOM节点信息
-    soup = BeautifulSoup(result.text, "html.parser")
-    items = soup.find_all(class_='ranking-item')
-    items_length = len(items)
-    for i in range(1):
-        curr_dom = items[i]
-        image_url = 'https://www.pixiv.net' + curr_dom.find(class_='ranking-image-item').a.get('href')
-        small_jpg_url = curr_dom.find('img').get('data-src')
-        headers['Referer'] = image_url
-        filename = re.search(re_filename, image_url).group() + '.jpg'
+# list = getCrawlUrl()
+# for url in list:
+#     result = login.get(url=url, headers=headers)
+#     # 获取我们分析的主要的DOM节点信息
+#     soup = BeautifulSoup(result.text, "html.parser")
+#     items = soup.find_all(class_='ranking-item')
+#     items_length = len(items)
+#     for i in range(MAX_EACH_PAGE):
+#         curr_dom = items[i]
+#         image_url = 'https://www.pixiv.net' + curr_dom.find(class_='ranking-image-item').a.get('href')
+#         small_jpg_url = curr_dom.find('img').get('data-src')
+#         headers['Referer'] = image_url
+#         filename = re.search(re_filename, image_url).group() + '.jpg'
+#
+#         if isSingleImage(curr_dom):
+#             singleImageCrawl(small_jpg_url, filename, login)
+#         else:
+#             manyImageCrawl(small_jpg_url, filename, curr_dom, login)
+headers['Referer']='https://www.pixiv.net/member_illust.php?mode=medium&illust_id=64284673'
+# headers['Range']='bytes=1-10349961'
+result = login.get(url='https://i.pximg.net/img-zip-ugoira/img/2017/08/08/00/02/30/64284673_ugoira600x600.zip',headers=headers,stream=True)
+# result = login.get(url='https://i.pximg.net/img-zip-ugoira/img/2017/08/08/00/02/30/64284673_ugoira600x600.zip',stream=True)
+content_length = result.headers['content-length']
+print(content_length)
+start = datetime.now().replace(microsecond=0)
+# with open(r'D:\pixiv\b.zip','wb') as f:
+    # for chunk in result.iter_content(chunk_size=512):
+        # if chunk:
+#     f.write(result.content)
+# print(datetime.now().replace(microsecond=0)-start)
+lock = threading.Lock()
 
-        if isSingleImage(curr_dom):
-            singleImageCrawl(small_jpg_url, filename, login)
-        else:
-            manyImageCrawl(small_jpg_url, filename, curr_dom, login)
+def downloadZip(login,url,start,end,filename):
+    headers['Range'] = 'bytes=%d-%d' % (start,end)
+    r = login.get(url=url,headers=headers,stream=True)
+    with open(filename,'wb') as f:
+        print('start %s' % start)
+        lock.acquire()
+        f.seek(start)
+        print('end %s'% end)
+        f.write(r.content)
+        lock.release()
+        print(f.tell())
+        print('--------------------------')
+
+
+THREAD_COUNT = 5
+thread_list = []
+
+part = int(content_length) // THREAD_COUNT
+file = r'D:\pixiv\b.zip'
+u='https://i.pximg.net/img-zip-ugoira/img/2017/08/08/00/02/30/64284673_ugoira600x600.zip'
+for i in range(THREAD_COUNT):
+    s = part * i
+    if i == THREAD_COUNT-1:
+        e = s+part-1
+    else:
+        e = int(content_length)-1
+    t = threading.Thread(target=downloadZip, args=(login,u, s, e, file))
+    thread_list.append(t)
+
+for t in thread_list:
+    t.start()
+
+for t in thread_list:
+    t.join()
+
+print(datetime.now().replace(microsecond=0)-start)
+
