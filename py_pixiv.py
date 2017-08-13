@@ -3,13 +3,13 @@ from bs4 import BeautifulSoup
 import re
 import os
 from datetime import datetime
-import threading
+import gif_downloader
 
-
-MAX_RANK_PAGE = 10
-MAX_EACH_PAGE = 1
-MAX_MANY_IMAGE_COUNT = 1
+MAX_RANK_PAGE = 1      # 50 * MAX_RANK_PAGE
+MAX_EACH_PAGE = 5       # MAX_EACH_PAGE/50
+MAX_MANY_IMAGE_COUNT = 1   # 多图中抓取数
 DOWNLOAD_PATH = 'D:\pixiv'  # 图片存放地址
+GIF_DOWNLOAD_PATH = 'D:\pixiv\gif'
 
 re_filename = re.compile('(\d+)')
 
@@ -23,6 +23,12 @@ MODE_LIST = {
     '7': 'female'
 }
 
+
+CONTENT_LIST = {
+    '1': '',
+    '2': 'illust',
+    '3': 'ugoira',
+}
 # Referer防盗链
 # Range断点获取响应内容
 headers = {
@@ -33,7 +39,8 @@ headers = {
 
 param = {
     'mode': '',
-    'date': ''
+    'date': '',
+    'content':''
 }
 # post请求内容
 data = {
@@ -48,7 +55,7 @@ data = {
 }
 
 
-def downloadPath(path):
+def getdownloadPath(path):
     if not os.path.exists(path):
         os.mkdir(path)
     return path
@@ -104,16 +111,16 @@ def isSingleImage(imgdom):
 
 # 单张图片抓取
 def singleImageCrawl(small_jpg_url, filename, login_req):
-    downloadpath = downloadPath(DOWNLOAD_PATH)
+    downloadpath = getdownloadPath(DOWNLOAD_PATH)
     large_jpg_url = small_jpg_url.replace(r'c/240x480/img-master', 'img-original').replace('_master1200', '')
+    gif_url = small_jpg_url.replace(r'c/240x480/img-master', 'img-zip-ugoira').replace('_master1200.jpg', '_ugoira600x600.zip')
     large_png_url = large_jpg_url.replace('jpg', 'png')
-    print(large_jpg_url)
-    downloadImage(downloadpath, filename, large_jpg_url, large_png_url, login_req)
+    downloadImage(downloadpath, filename, large_jpg_url, large_png_url,gif_url, login_req)
 
 
 # 多张图片抓取
 def manyImageCrawl(small_jpg_url, filename, imgdom, login_req):
-    downloadpath = downloadPath(DOWNLOAD_PATH)
+    downloadpath = getdownloadPath(DOWNLOAD_PATH)
     page_count = imgdom.find(class_='page-count').span.text
     for j in range(int(page_count)):
         # 暂时不需要下载太多---------------------------------------------------------------
@@ -122,30 +129,36 @@ def manyImageCrawl(small_jpg_url, filename, imgdom, login_req):
         f = filename.replace('.', '-' + str(j) + '.')
         p = '_p' + str(j) + '_'
         large_jpg_url = small_jpg_url.replace(r'c/240x480/', '').replace('_p0_', p)
-        print(large_jpg_url)
         large_png_url = large_jpg_url.replace('jpg', 'png')
-        downloadImage(downloadpath, f, large_jpg_url, large_png_url, login_req)
+        downloadImage(downloadpath, f, large_jpg_url, large_png_url,'' ,login_req)
 
 
 # 图片下载
-def downloadImage(downloadpath, filename, jpgurl, pngurl, login_req):
+def downloadImage(downloadpath, filename, jpgurl, pngurl,gifurl, login_req):
     fullpath = os.path.join(downloadpath, filename)
     jpg = login_req.get(url=jpgurl, headers=headers, stream=True)
     png = login_req.get(url=pngurl, headers=headers, stream=True)
+    gif = login_req.get(url=gifurl, headers=headers, stream=True)
     if not isImageExist(fullpath):
-        with open(fullpath, 'wb') as f:
-            if jpg.status_code == 200:
-                print('图片下载开始%s' % filename)
-                s = datetime.now()
-                f.write(jpg.content)
-                print('图片下载结束 , 耗时 %s 秒 , 文件大小 %s KB' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024)))
-            elif png.status_code == 200:
-                print('图片下载开始%s' % filename)
-                s = datetime.now()
-                f.write(png.content)
-                print('图片下载结束 , 耗时 %s 秒 , 文件大小 %s KB' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024)))
-            else:
-                print('图片下载出错!!!')
+        if gif.status_code==200:
+            print('动图下载开始%s' % filename)
+            s = datetime.now()
+            gif_downloader.downloader(login=login, url=gifurl, num=5, filename=fullpath).run()
+            print('动图下载结束 , 耗时 %s 秒 , 文件大小 %.2f MB' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024 / 1024)))
+        else:
+            with open(fullpath, 'wb') as f:
+                if jpg.status_code == 200:
+                    print('图片下载开始%s' % filename)
+                    s = datetime.now()
+                    f.write(jpg.content)
+                    print('图片下载结束 , 耗时 %s 秒 , 文件大小 %.2f MB' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024 / 1024)))
+                elif png.status_code == 200:
+                    print('图片下载开始%s' % filename)
+                    s = datetime.now()
+                    f.write(png.content)
+                    print('图片下载结束 , 耗时 %s 秒 , 文件大小 %.2f MB' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024/1024)))
+                else:
+                    print('图片下载出错!!!')
     else:
         print('图片已存在!!')
 
@@ -153,71 +166,24 @@ def downloadImage(downloadpath, filename, jpgurl, pngurl, login_req):
 # 登录
 login = loginPixiv()
 # list = getCrawlUrl()
-# for url in list:
-#     result = login.get(url=url, headers=headers)
-#     # 获取我们分析的主要的DOM节点信息
-#     soup = BeautifulSoup(result.text, "html.parser")
-#     items = soup.find_all(class_='ranking-item')
-#     items_length = len(items)
-#     for i in range(MAX_EACH_PAGE):
-#         curr_dom = items[i]
-#         image_url = 'https://www.pixiv.net' + curr_dom.find(class_='ranking-image-item').a.get('href')
-#         small_jpg_url = curr_dom.find('img').get('data-src')
-#         headers['Referer'] = image_url
-#         filename = re.search(re_filename, image_url).group() + '.jpg'
-#
-#         if isSingleImage(curr_dom):
-#             singleImageCrawl(small_jpg_url, filename, login)
-#         else:
-#             manyImageCrawl(small_jpg_url, filename, curr_dom, login)
-headers['Referer']='https://www.pixiv.net/member_illust.php?mode=medium&illust_id=64284673'
-# headers['Range']='bytes=1-10349961'
-result = login.get(url='https://i.pximg.net/img-zip-ugoira/img/2017/08/08/00/02/30/64284673_ugoira600x600.zip',headers=headers,stream=True)
-# result = login.get(url='https://i.pximg.net/img-zip-ugoira/img/2017/08/08/00/02/30/64284673_ugoira600x600.zip',stream=True)
-content_length = result.headers['content-length']
-print(content_length)
-start = datetime.now().replace(microsecond=0)
-# with open(r'D:\pixiv\b.zip','wb') as f:
-    # for chunk in result.iter_content(chunk_size=512):
-        # if chunk:
-#     f.write(result.content)
-# print(datetime.now().replace(microsecond=0)-start)
-lock = threading.Lock()
+list = ['https://www.pixiv.net/ranking.php?mode=daily&content=ugoira']
+for url in list:
+    result = login.get(url=url, headers=headers)
+    # 获取我们分析的主要的DOM节点信息
+    soup = BeautifulSoup(result.text, "html.parser")
+    items = soup.find_all(class_='ranking-item')
+    items_length = len(items)
+    for i in range(MAX_EACH_PAGE):
+        curr_dom = items[i]
+        image_url = 'https://www.pixiv.net' + curr_dom.find(class_='ranking-image-item').a.get('href')
+        small_jpg_url = curr_dom.find('img').get('data-src')
+        headers['Referer'] = image_url
+        image_id = re.search(re_filename, image_url).group()
+        filename = image_id + '.jpg'
+        filename_gif = image_id + '.zip'
+        if isSingleImage(curr_dom):
+            singleImageCrawl(small_jpg_url, filename_gif, login)
+        else:
+            manyImageCrawl(small_jpg_url, filename_gif, curr_dom, login)
 
-def downloadZip(login,url,start,end,filename):
-    headers['Range'] = 'bytes=%d-%d' % (start,end)
-    r = login.get(url=url,headers=headers,stream=True)
-    with open(filename,'wb') as f:
-        print('start %s' % start)
-        lock.acquire()
-        f.seek(start)
-        print('end %s'% end)
-        f.write(r.content)
-        lock.release()
-        print(f.tell())
-        print('--------------------------')
-
-
-THREAD_COUNT = 5
-thread_list = []
-
-part = int(content_length) // THREAD_COUNT
-file = r'D:\pixiv\b.zip'
-u='https://i.pximg.net/img-zip-ugoira/img/2017/08/08/00/02/30/64284673_ugoira600x600.zip'
-for i in range(THREAD_COUNT):
-    s = part * i
-    if i == THREAD_COUNT-1:
-        e = s+part-1
-    else:
-        e = int(content_length)-1
-    t = threading.Thread(target=downloadZip, args=(login,u, s, e, file))
-    thread_list.append(t)
-
-for t in thread_list:
-    t.start()
-
-for t in thread_list:
-    t.join()
-
-print(datetime.now().replace(microsecond=0)-start)
 

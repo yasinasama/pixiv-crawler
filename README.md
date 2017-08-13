@@ -9,4 +9,5 @@ Crawl the images from Pixiv with Python
         5.黑白图片过滤，我想你可能不需要这种图片吧
         6.动图的获取
          6.1  P站动图都是通过请求zip（里面是每一帧的图像）
-         6.2  zip很大，单线程下载慢  采用多线程
+         6.2  zip很大，单线程下载慢  采用多线程   stream=TRUE  有点问题
+         6.3  多线程共享变量要格外注意啊
