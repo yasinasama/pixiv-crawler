@@ -2,15 +2,13 @@ import threading
 
 
 class downloader:
-    def __init__(self, login, url, num,filename):
+    def __init__(self, login, url, num, filename):
         self.url = url
         self.num = num
         self.login = login
         self.lock = threading.Lock()
         self.filename = filename
-        r = self.login.head(self.url)
-        self.total = int(r.headers['Content-Length'])
-        print('文件大小: %.2f M' % (self.total / 1024 / 1024))
+        self.total = int(self.login.head(self.url).headers['Content-Length'])
 
     def get_range(self):
         ranges = []
@@ -22,7 +20,7 @@ class downloader:
                 ranges.append((i * offset, (i + 1) * offset - 1))
         return ranges
 
-    def download(self, start, end,f):
+    def download(self, start, end, f):
         headers = {'Range': 'Bytes=%s-%s' % (start, end)}
         res = self.login.get(self.url, headers=headers)
         with self.lock:
@@ -44,6 +42,3 @@ class downloader:
             i.join()
 
         fn.close()
-
-
-

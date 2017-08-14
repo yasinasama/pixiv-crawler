@@ -5,13 +5,13 @@ import os
 from datetime import datetime
 import gif_downloader
 
-MAX_RANK_PAGE = 1  # 50 * MAX_RANK_PAGE
-MAX_EACH_PAGE = 5  # MAX_EACH_PAGE/50
-MAX_MANY_IMAGE_COUNT = 1  # 多图中抓取数
-DOWNLOAD_PATH = 'D:\pixiv'  # 图片存放地址
-GIF_DOWNLOAD_PATH = 'D:\pixiv\gif'
+MAX_RANK_PAGE = 1  # 50 * MAX_RANK_PAGE   MAX 10
+MAX_EACH_PAGE = 50  # MAX_EACH_PAGE/50     MAX 50
+MAX_MANY_IMAGE_COUNT = 5  # 多图中抓取数
+DOWNLOAD_PATH = 'D:\pixiv\image'  # 图片存放地址
+GIF_DOWNLOAD_PATH = 'D:\pixiv\gif'  # 动图存放地址
 
-THREAD_COUNT = 5
+THREAD_COUNT = 200
 
 re_filename = re.compile('(\d+)')
 
@@ -24,7 +24,6 @@ MODE_LIST = {
     '6': 'male',
     '7': 'female'
 }
-
 
 CONTENT_LIST = {
     '1': '',  # 综合
@@ -131,7 +130,7 @@ def getCrawlUrl():
                 if content == '':
                     url_list.append('https://www.pixiv.net/ranking.php?mode=%s&date=%s&p=%s' % (mode, date, i + 1))
                 else:
-                    url_list.append('https://www.pixiv.net/ranking.php?mode=%s&content=%s&date=%s&p=%s' % (mode,content, date, i + 1))
+                    url_list.append('https://www.pixiv.net/ranking.php?mode=%s&content=%s&date=%s&p=%s' % (mode, content, date, i + 1))
             return url_list
         else:
             print('输入日期必须早于当前日期!!!!')
@@ -170,13 +169,13 @@ def gifImageCrawl(small_jpg_url, filename, login_req):
 # 动图下载
 def downloadGif(downloadpath, filename, gifurl, login_req):
     fullpath = os.path.join(downloadpath, filename)
-    gif = login_req.get(url=gifurl, headers=headers, stream=True)
+    gif = login_req.head(url=gifurl, headers=headers)
     if not isImageExist(fullpath):
         if gif.status_code == 200:
             print('动图下载开始%s' % filename)
             s = datetime.now()
-            gif_downloader.downloader(login=login, url=gifurl, num=THREAD_COUNT, filename=fullpath).run()
-            print('动图下载结束 , 耗时 %s 秒 , 文件大小 %d KB' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024)))
+            gif_downloader.downloader(login=login_req, url=gifurl, num=THREAD_COUNT, filename=fullpath).run()
+            print('动图下载结束 , 耗时 %s 秒 , 文件大小 %d KB , 平均下载速度 %d KB/S' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024), int(os.path.getsize(fullpath) / 1024 / (datetime.now() - s).seconds)))
         else:
             print('无法找到该动图!!!')
     else:
@@ -186,22 +185,21 @@ def downloadGif(downloadpath, filename, gifurl, login_req):
 # 图片下载
 def downloadImage(downloadpath, filename, jpgurl, pngurl, login_req):
     fullpath = os.path.join(downloadpath, filename)
-    jpg = login_req.get(url=jpgurl, headers=headers, stream=True)
-    png = login_req.get(url=pngurl, headers=headers, stream=True)
+    jpg = login_req.head(url=jpgurl, headers=headers)
+    png = login_req.head(url=pngurl, headers=headers)
     if not isImageExist(fullpath):
-        with open(fullpath, 'wb') as f:
-            if jpg.status_code == 200:
-                print('图片下载开始%s' % filename)
-                s = datetime.now()
-                f.write(jpg.content)
-                print('图片下载结束 , 耗时 %s 秒 , 文件大小 %d KB' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024)))
-            elif png.status_code == 200:
-                print('图片下载开始%s' % filename)
-                s = datetime.now()
-                f.write(png.content)
-                print('图片下载结束 , 耗时 %s 秒 , 文件大小 %d KB' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024)))
-            else:
-                print('无法找到该图片!!!')
+        if jpg.status_code == 200:
+            print('图片下载开始%s' % filename)
+            s = datetime.now()
+            gif_downloader.downloader(login=login, url=jpgurl, num=THREAD_COUNT, filename=fullpath).run()
+            print('图片下载结束 , 耗时 %s 秒 , 文件大小 %d KB , 平均下载速度 %d KB/S' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024), int(os.path.getsize(fullpath) / 1024 / (datetime.now() - s).seconds)))
+        elif png.status_code == 200:
+            print('图片下载开始%s' % filename)
+            s = datetime.now()
+            gif_downloader.downloader(login=login, url=pngurl, num=THREAD_COUNT, filename=fullpath).run()
+            print('图片下载结束 , 耗时 %s 秒 , 文件大小 %d KB , 平均下载速度 %d KB/S' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024), int(os.path.getsize(fullpath) / 1024 / (datetime.now() - s).seconds)))
+        else:
+            print('无法找到该图片!!!')
     else:
         print('图片已存在!!')
 
