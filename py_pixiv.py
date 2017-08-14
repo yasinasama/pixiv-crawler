@@ -5,11 +5,13 @@ import os
 from datetime import datetime
 import gif_downloader
 
-MAX_RANK_PAGE = 1      # 50 * MAX_RANK_PAGE
-MAX_EACH_PAGE = 5       # MAX_EACH_PAGE/50
-MAX_MANY_IMAGE_COUNT = 1   # 多图中抓取数
+MAX_RANK_PAGE = 1  # 50 * MAX_RANK_PAGE
+MAX_EACH_PAGE = 5  # MAX_EACH_PAGE/50
+MAX_MANY_IMAGE_COUNT = 1  # 多图中抓取数
 DOWNLOAD_PATH = 'D:\pixiv'  # 图片存放地址
 GIF_DOWNLOAD_PATH = 'D:\pixiv\gif'
+
+THREAD_COUNT = 5
 
 re_filename = re.compile('(\d+)')
 
@@ -25,9 +27,9 @@ MODE_LIST = {
 
 
 CONTENT_LIST = {
-    '1': '',
-    '2': 'illust',
-    '3': 'ugoira',
+    '1': '',  # 综合
+    '2': 'illust',  # 插画
+    '3': 'ugoira',  # 动图
 }
 # Referer防盗链
 # Range断点获取响应内容
@@ -40,7 +42,7 @@ headers = {
 param = {
     'mode': '',
     'date': '',
-    'content':''
+    'content': ''
 }
 # post请求内容
 data = {
@@ -55,16 +57,32 @@ data = {
 }
 
 
+# 文件保存路径
 def getdownloadPath(path):
     if not os.path.exists(path):
         os.mkdir(path)
     return path
 
 
+# 图片存在？
 def isImageExist(filename):
     return True if os.path.exists(filename) else False
 
 
+# 单张图片？
+def isSingleImage(imgdom):
+    return False if imgdom.find(class_='page-count') else True
+
+
+# 图片 OR GIF
+def getImageType(url):
+    if url.find('_p0') > 0:
+        return 'image'
+    else:
+        return 'gif'
+
+
+# 登录
 def loginPixiv():
     pixiv_id = input('请输入账号: ')
     password = input('请输入密码: ')
@@ -92,30 +110,39 @@ def loginPixiv():
 
 def getCrawlUrl():
     while True:
-        mode_input = input('请选择你感兴趣的(输入对应数字即可): 1 今日,2 本周,3 本月,4 新人,5 原创,6 受男性欢迎,7 受女性欢迎 ------------- ')
-        date = input('请输入日期:  例如20170808 -----------  ')
+        content_input = input('请选择你感兴趣的内容(输入对应数字即可): 1 综合,2 插画,3 动图 >>>>>')
+        if content_input == '1':
+            mode_input = input('请选择你感兴趣的(输入对应数字即可): 1 今日,2 本周,3 本月,4 新人,5 原创,6 受男性欢迎,7 受女性欢迎 >>>>>>')
+        elif content_input == '2':
+            mode_input = input('请选择你感兴趣的(输入对应数字即可): 1 今日,2 本周,3 本月,4 新人 >>>>>>')
+        elif content_input == '3':
+            mode_input = input('请选择你感兴趣的(输入对应数字即可): 1 今日,2 本周 >>>>>>')
+        else:
+            print('请正确输入!!!')
+            continue
+        date = input('请输入日期:  例如20170101 -----------  ')
         today = datetime.strftime(datetime.date(datetime.now()), '%Y%m%d')
+
         if date < today:
+            content = CONTENT_LIST[content_input]
             mode = MODE_LIST[mode_input]
             url_list = []
             for i in range(MAX_RANK_PAGE):
-                url_list.append('https://www.pixiv.net/ranking.php?mode=%s&date=%s&p=%s' % (mode, date, i + 1))
+                if content == '':
+                    url_list.append('https://www.pixiv.net/ranking.php?mode=%s&date=%s&p=%s' % (mode, date, i + 1))
+                else:
+                    url_list.append('https://www.pixiv.net/ranking.php?mode=%s&content=%s&date=%s&p=%s' % (mode,content, date, i + 1))
             return url_list
         else:
             print('输入日期必须早于当前日期!!!!')
-
-
-def isSingleImage(imgdom):
-    return False if imgdom.find(class_='page-count') else True
 
 
 # 单张图片抓取
 def singleImageCrawl(small_jpg_url, filename, login_req):
     downloadpath = getdownloadPath(DOWNLOAD_PATH)
     large_jpg_url = small_jpg_url.replace(r'c/240x480/img-master', 'img-original').replace('_master1200', '')
-    gif_url = small_jpg_url.replace(r'c/240x480/img-master', 'img-zip-ugoira').replace('_master1200.jpg', '_ugoira600x600.zip')
     large_png_url = large_jpg_url.replace('jpg', 'png')
-    downloadImage(downloadpath, filename, large_jpg_url, large_png_url,gif_url, login_req)
+    downloadImage(downloadpath, filename, large_jpg_url, large_png_url, login_req)
 
 
 # 多张图片抓取
@@ -130,43 +157,59 @@ def manyImageCrawl(small_jpg_url, filename, imgdom, login_req):
         p = '_p' + str(j) + '_'
         large_jpg_url = small_jpg_url.replace(r'c/240x480/', '').replace('_p0_', p)
         large_png_url = large_jpg_url.replace('jpg', 'png')
-        downloadImage(downloadpath, f, large_jpg_url, large_png_url,'' ,login_req)
+        downloadImage(downloadpath, f, large_jpg_url, large_png_url, login_req)
+
+
+# 动图抓取
+def gifImageCrawl(small_jpg_url, filename, login_req):
+    downloadpath = getdownloadPath(GIF_DOWNLOAD_PATH)
+    gif_url = small_jpg_url.replace(r'c/240x480/img-master', 'img-zip-ugoira').replace('_master1200.jpg', '_ugoira600x600.zip')
+    downloadGif(downloadpath, filename, gif_url, login_req)
+
+
+# 动图下载
+def downloadGif(downloadpath, filename, gifurl, login_req):
+    fullpath = os.path.join(downloadpath, filename)
+    gif = login_req.get(url=gifurl, headers=headers, stream=True)
+    if not isImageExist(fullpath):
+        if gif.status_code == 200:
+            print('动图下载开始%s' % filename)
+            s = datetime.now()
+            gif_downloader.downloader(login=login, url=gifurl, num=THREAD_COUNT, filename=fullpath).run()
+            print('动图下载结束 , 耗时 %s 秒 , 文件大小 %d KB' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024)))
+        else:
+            print('无法找到该动图!!!')
+    else:
+        print('动图已存在!!')
 
 
 # 图片下载
-def downloadImage(downloadpath, filename, jpgurl, pngurl,gifurl, login_req):
+def downloadImage(downloadpath, filename, jpgurl, pngurl, login_req):
     fullpath = os.path.join(downloadpath, filename)
     jpg = login_req.get(url=jpgurl, headers=headers, stream=True)
     png = login_req.get(url=pngurl, headers=headers, stream=True)
-    gif = login_req.get(url=gifurl, headers=headers, stream=True)
     if not isImageExist(fullpath):
-        if gif.status_code==200:
-            print('动图下载开始%s' % filename)
-            s = datetime.now()
-            gif_downloader.downloader(login=login, url=gifurl, num=5, filename=fullpath).run()
-            print('动图下载结束 , 耗时 %s 秒 , 文件大小 %.2f MB' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024 / 1024)))
-        else:
-            with open(fullpath, 'wb') as f:
-                if jpg.status_code == 200:
-                    print('图片下载开始%s' % filename)
-                    s = datetime.now()
-                    f.write(jpg.content)
-                    print('图片下载结束 , 耗时 %s 秒 , 文件大小 %.2f MB' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024 / 1024)))
-                elif png.status_code == 200:
-                    print('图片下载开始%s' % filename)
-                    s = datetime.now()
-                    f.write(png.content)
-                    print('图片下载结束 , 耗时 %s 秒 , 文件大小 %.2f MB' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024/1024)))
-                else:
-                    print('图片下载出错!!!')
+        with open(fullpath, 'wb') as f:
+            if jpg.status_code == 200:
+                print('图片下载开始%s' % filename)
+                s = datetime.now()
+                f.write(jpg.content)
+                print('图片下载结束 , 耗时 %s 秒 , 文件大小 %d KB' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024)))
+            elif png.status_code == 200:
+                print('图片下载开始%s' % filename)
+                s = datetime.now()
+                f.write(png.content)
+                print('图片下载结束 , 耗时 %s 秒 , 文件大小 %d KB' % ((datetime.now() - s).seconds, int(os.path.getsize(fullpath) / 1024)))
+            else:
+                print('无法找到该图片!!!')
     else:
         print('图片已存在!!')
 
 
 # 登录
 login = loginPixiv()
-# list = getCrawlUrl()
-list = ['https://www.pixiv.net/ranking.php?mode=daily&content=ugoira']
+list = getCrawlUrl()
+
 for url in list:
     result = login.get(url=url, headers=headers)
     # 获取我们分析的主要的DOM节点信息
@@ -176,14 +219,18 @@ for url in list:
     for i in range(MAX_EACH_PAGE):
         curr_dom = items[i]
         image_url = 'https://www.pixiv.net' + curr_dom.find(class_='ranking-image-item').a.get('href')
-        small_jpg_url = curr_dom.find('img').get('data-src')
+        data_src = curr_dom.find('img').get('data-src')
+        print(data_src)
         headers['Referer'] = image_url
         image_id = re.search(re_filename, image_url).group()
-        filename = image_id + '.jpg'
-        filename_gif = image_id + '.zip'
-        if isSingleImage(curr_dom):
-            singleImageCrawl(small_jpg_url, filename_gif, login)
+        if getImageType(data_src) == 'image':
+            filename = image_id + '.jpg'
+            if isSingleImage(curr_dom):
+                singleImageCrawl(data_src, filename, login)
+            else:
+                manyImageCrawl(data_src, filename, curr_dom, login)
+        elif getImageType(data_src) == 'gif':
+            filename = image_id + '.zip'
+            gifImageCrawl(data_src, filename, login)
         else:
-            manyImageCrawl(small_jpg_url, filename_gif, curr_dom, login)
-
-
+            print('没有这种格式的图片!!')
