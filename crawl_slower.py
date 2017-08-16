@@ -3,12 +3,12 @@ from bs4 import BeautifulSoup
 import re
 import os
 from datetime import datetime
-import gif_downloader
+import file_downloader
 
 MAX_RANK_PAGE = 1  # 50 * MAX_RANK_PAGE   MAX 10
-MAX_EACH_PAGE = 50  # MAX_EACH_PAGE/50     MAX 50
+MAX_EACH_PAGE = 1  # MAX_EACH_PAGE/50     MAX 50
 MAX_MANY_IMAGE_COUNT = 5  # 多图中抓取数
-DOWNLOAD_PATH = 'D:\pixiv\image'  # 图片存放地址
+DOWNLOAD_PATH = 'D:\pixiv\demo2'  # 图片存放地址
 GIF_DOWNLOAD_PATH = 'D:\pixiv\gif'  # 动图存放地址
 
 THREAD_COUNT = 20
@@ -174,7 +174,7 @@ def downloadGif(downloadpath, filename, gifurl, login_req,image_url):
         if gif.status_code == 200:
             print('动图下载开始%s' % filename)
             s = datetime.now().timestamp()
-            gif_downloader.downloader(login=login_req, url=gifurl, num=THREAD_COUNT, filename=fullpath,referer=image_url).run()
+            file_downloader.downloader(login=login_req, url=gifurl, num=THREAD_COUNT, filename=fullpath, referer=image_url).run()
             e = datetime.now().timestamp()
             print('动图下载结束 , 耗时 %.2f 秒 , 文件大小 %.2f KB , 平均下载速度 %.2f KB/S' % ((e - s), (os.path.getsize(fullpath) / 1024), (os.path.getsize(fullpath) / 1024 / (e- s))))
         else:
@@ -192,13 +192,13 @@ def downloadImage(downloadpath, filename, jpgurl, pngurl, login_req,image_url):
         if jpg.status_code == 200:
             print('图片下载开始%s' % filename)
             s = datetime.now().timestamp()
-            gif_downloader.downloader(login=login, url=jpgurl, num=THREAD_COUNT, filename=fullpath,referer=image_url).run()
+            file_downloader.downloader(login=login, url=jpgurl, num=THREAD_COUNT, filename=fullpath, referer=image_url).run()
             e = datetime.now().timestamp()
             print('图片下载结束 , 耗时 %.2f 秒 , 文件大小 %.2f KB , 平均下载速度 %.2f KB/S' % ((e - s), (os.path.getsize(fullpath) / 1024), (os.path.getsize(fullpath) / 1024 / (e- s))))
         elif png.status_code == 200:
             print('图片下载开始%s' % filename)
             s = datetime.now().timestamp()
-            gif_downloader.downloader(login=login, url=pngurl, num=THREAD_COUNT, filename=fullpath,referer=image_url).run()
+            file_downloader.downloader(login=login, url=pngurl, num=THREAD_COUNT, filename=fullpath, referer=image_url).run()
             e = datetime.now().timestamp()
             print('图片下载结束 , 耗时 %.2f 秒 , 文件大小 %.2f KB , 平均下载速度 %.2f KB/S' % ((e - s), (os.path.getsize(fullpath) / 1024), (os.path.getsize(fullpath) / 1024 / (e- s))))
         else:

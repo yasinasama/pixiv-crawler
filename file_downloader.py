@@ -2,7 +2,7 @@ import threading
 
 
 class downloader:
-    def __init__(self, login, url, num, filename,referer):
+    def __init__(self, login, url, num, filename, referer):
         self.url = url
         self.num = num
         self.login = login
@@ -37,6 +37,7 @@ class downloader:
                 print(e)
                 retry+=1
                 if retry==3:
+                    print('重试三次均失败，退出！！')
                     break
         if success:
             with self.lock:
@@ -58,3 +59,4 @@ class downloader:
             i.join()
 
         fn.close()
+
