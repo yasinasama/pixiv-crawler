@@ -10,10 +10,11 @@ import threading
 MAX_RANK_PAGE = 1  # 50 * MAX_RANK_PAGE   MAX 10
 MAX_EACH_PAGE = 1  # MAX_EACH_PAGE/50     MAX 50
 MAX_MANY_IMAGE_COUNT = 5  # 多图中抓取数
-DOWNLOAD_PATH = 'd:\pixiv\demo'  # 图片存放地址
+DOWNLOAD_PATH = 'd:\pixiv\demo4'  # 图片存放地址
 GIF_DOWNLOAD_PATH = 'd:\pixiv\gif'  # 动图存放地址
 
-THREAD_COUNT = 20
+THREAD_COUNT = 20  # 线程数
+TIMEOUT = 5  # 最好都设置，不然有可能程序无响应
 URL_QUEUE = queue.Queue()
 re_filename = re.compile('(\d+)')
 
@@ -57,12 +58,14 @@ data = {
     'post_key': ''
 }
 
+
 # 文件夹大小
 def getDirSize():
     dir_size = 0
     for i in os.listdir(DOWNLOAD_PATH):
         dir_size += os.path.getsize(os.path.join(DOWNLOAD_PATH, i))
     return dir_size
+
 
 # 文件保存路径
 def getdownloadPath(path):
@@ -97,7 +100,7 @@ def loginPixiv():
     p = requests.Session()
     # 获取post请求必要数据
     p.headers = headers
-    r = p.get(url='https://accounts.pixiv.net/login', headers=headers)
+    r = p.get(url='https://accounts.pixiv.net/login', headers=headers, timeout=TIMEOUT)
     parrern = re.compile(r'name="post_key" value="(.*?)">')
     res = parrern.search(r.text)
     data['post_key'] = res.group()
@@ -107,7 +110,7 @@ def loginPixiv():
     # post请求模拟登陆
     print('模拟登陆开始......')
     try:
-        p.post(url='https://accounts.pixiv.net/api/login', data=data)
+        p.post(url='https://accounts.pixiv.net/api/login', data=data, timeout=TIMEOUT)
         print('模拟登陆成功......')
         return p
     except:
@@ -145,42 +148,35 @@ def getCrawlUrl():
 
 
 # 动图URL收集
-def collectGifUrl(image_src, referer_url, login):
-    image_id = re.search(re_filename, referer_url).group()
+def collectGifUrl(image_src, image_id, login):
+    image_name, image_url = '', ''
     gif_url = image_src.replace(r'c/240x480/img-master', 'img-zip-ugoira').replace('_master1200.jpg', '_ugoira600x600.zip')
-    gif = login.head(url=gif_url, headers=headers)
+    gif = login.head(url=gif_url, headers=headers, timeout=TIMEOUT)
     if gif.status_code == 200:
-        image_name = os.path.join(DOWNLOAD_PATH, image_id + '.zip')
-        if not isImageExist(image_name):
-            URL_QUEUE.put([image_name, referer_url, gif_url])
-        else:
-            print('动图已存在!!')
+        image_name = image_id + '.zip'
+        image_url = gif_url
     else:
         print('无法找到该动图!!!')
 
+    return image_name, image_url
+
 
 # 图片URL收集
-def collectImageUrl(dom, image_src, referer_url, login):
-    image_id = re.search(re_filename, referer_url).group()
+def collectImageUrl(dom, image_src, image_id, login):
+    image_name, image_url = '', ''
     # 单张图
     if isSingleImage(dom):
         image_jpg_url = image_src.replace(r'c/240x480/img-master', 'img-original').replace('_master1200', '')
         image_png_url = image_jpg_url.replace('jpg', 'png')
-        jpg = login.head(url=image_jpg_url, headers=headers)
-        png = login.head(url=image_png_url, headers=headers)
+        jpg = login.head(url=image_jpg_url, headers=headers, timeout=TIMEOUT)
+        png = login.head(url=image_png_url, headers=headers, timeout=TIMEOUT)
         if jpg.status_code == 200:
-            image_name = os.path.join(DOWNLOAD_PATH, image_id + '.jpg')
-            if not isImageExist(image_name):
-                URL_QUEUE.put([image_name, referer_url, image_jpg_url])
-            else:
-                print('图片已存在!!')
+            image_name = image_id + '.jpg'
+            image_url = image_jpg_url
 
         elif png.status_code == 200:
-            image_name = os.path.join(DOWNLOAD_PATH, image_id + '.png')
-            if not isImageExist(image_name):
-                URL_QUEUE.put([image_name, referer_url, image_png_url])
-            else:
-                print('图片已存在!!')
+            image_name = image_id + '.png'
+            image_url = image_png_url
         else:
             print('无法找到该图片!!!')
     # 多张图
@@ -194,22 +190,18 @@ def collectImageUrl(dom, image_src, referer_url, login):
             p = '_p' + str(j) + '_'
             image_jpg_url = image_src.replace(r'c/240x480/', '').replace('_p0_', p)
             image_png_url = image_jpg_url.replace('jpg', 'png')
-            jpg = login.head(url=image_jpg_url, headers=headers)
-            png = login.head(url=image_png_url, headers=headers)
+            jpg = login.head(url=image_jpg_url, headers=headers, timeout=TIMEOUT)
+            png = login.head(url=image_png_url, headers=headers, timeout=TIMEOUT)
             if jpg.status_code == 200:
-                image_name = os.path.join(DOWNLOAD_PATH, image_id + '.jpg').replace('.', '-' + str(j) + '.')
-                if not isImageExist(image_name):
-                    URL_QUEUE.put([image_name, referer_url, image_jpg_url])
-                else:
-                    print('图片已存在!!')
+                image_name = image_id + '.jpg'.replace('.', '-' + str(j) + '.')
+                image_url = image_jpg_url
             elif png.status_code == 200:
-                image_name = os.path.join(DOWNLOAD_PATH, image_id + '.png').replace('.', '-' + str(j) + '.')
-                if not isImageExist(image_name):
-                    URL_QUEUE.put([image_name, referer_url, image_png_url])
-                else:
-                    print('图片已存在!!')
+                image_name = image_id + '.png'.replace('.', '-' + str(j) + '.')
+                image_url = image_png_url
             else:
                 print('无法找到该图片!!!')
+
+    return image_name, image_url
 
 
 def downLoad(login):
@@ -222,9 +214,13 @@ def downLoad(login):
 
 def getReadyCrawlUrl(login):
     list = getCrawlUrl()
-
+    path = getdownloadPath(DOWNLOAD_PATH)
     for url in list:
-        result = login.get(url=url, headers=headers)
+        try:
+            result = login.get(url=url, headers=headers, timeout=TIMEOUT)
+        except Exception as e:
+            print(e)
+            raise
         # 获取我们分析的主要的DOM节点信息
         soup = BeautifulSoup(result.text, "html.parser")
         items = soup.find_all(class_='ranking-item')
@@ -233,16 +229,32 @@ def getReadyCrawlUrl(login):
             curr_dom = items[i]
             referer_url = 'https://www.pixiv.net' + curr_dom.find(class_='ranking-image-item').a.get('href')
             image_src = curr_dom.find('img').get('data-src')
+            image_id = re.search(re_filename, referer_url).group()
+            print(image_src)
             headers['Referer'] = referer_url
             if getImageType(image_src) == 'image':
-                collectImageUrl(curr_dom, image_src, referer_url, login)
+                co = collectImageUrl(curr_dom, image_src, image_id, login)
+                if co[0] != '' and co[1] != '':
+                    image_path = os.path.join(path, co[0])
+                    if not isImageExist(image_path):
+                        URL_QUEUE.put([image_path, referer_url, co[1]])
+                    else:
+                        print('图片已存在')
+                        continue
             elif getImageType(image_src) == 'gif':
-                collectGifUrl(image_src, referer_url, login)
+                co = collectGifUrl(image_src, image_id, login)
+                if co[0] != '' and co[1] != '':
+                    image_path = os.path.join(path, co[0])
+                    if not isImageExist(image_path):
+                        URL_QUEUE.put([image_path, referer_url, co[1]])
+                    else:
+                        print('动图已存在')
+                        continue
             else:
                 print('暂时不支持此类型！！')
 
 
-def main(login):
+def do(login):
     s = datetime.now()
     t = []
     for i in range(THREAD_COUNT):
@@ -262,6 +274,7 @@ def main(login):
     print('总计用时 %d 秒，平均下载速度 %d KB/S' % (use, size / use / 1024))
 
 
-login = loginPixiv()
-getReadyCrawlUrl(login)
-main(login)
+if __name__ == '__main__':
+    login = loginPixiv()
+    getReadyCrawlUrl(login)
+    do(login)

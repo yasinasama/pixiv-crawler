@@ -10,6 +10,7 @@ class downloader:
         self.filename = filename
         self.referer = referer
         self.total = int(self.login.head(self.url).headers['Content-Length'])
+        self.timeout = 10
 
     def get_range(self):
         ranges = []
@@ -29,15 +30,15 @@ class downloader:
             'Referer': '%s' % self.referer,
             'Range': 'Bytes=%s-%s' % (start, end)
         }
-        while retry<3 and not success:
+        while retry < 5 and not success:
             try:
-                res = self.login.get(self.url, headers=headers)
+                res = self.login.get(self.url, headers=headers,timeout=self.timeout)
                 success = True
             except Exception as e:
                 print(e)
-                retry+=1
-                if retry==3:
-                    print('重试三次均失败，退出！！')
+                retry += 1
+                if retry == 5:
+                    print('%s 重试三次均失败，退出！！' % self.filename)
                     break
         if success:
             with self.lock:
@@ -59,4 +60,3 @@ class downloader:
             i.join()
 
         fn.close()
-
