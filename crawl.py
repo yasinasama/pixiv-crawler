@@ -14,7 +14,7 @@ DOWNLOAD_PATH = 'd:\pixiv\demo4'  # 图片存放地址
 GIF_DOWNLOAD_PATH = 'd:\pixiv\gif'  # 动图存放地址
 
 THREAD_COUNT = 20  # 线程数
-TIMEOUT = 5  # 最好都设置，不然有可能程序无响应
+TIMEOUT = 10  # 最好都设置，不然有可能程序无响应
 URL_QUEUE = queue.Queue()
 re_filename = re.compile('(\d+)')
 
