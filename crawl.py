@@ -1,4 +1,4 @@
-import requests
+import requests,requests.adapters
 from bs4 import BeautifulSoup
 import re
 import os
@@ -6,17 +6,22 @@ from datetime import datetime
 import file_downloader
 import queue
 import threading
+import logging
 
-MAX_RANK_PAGE = 1  # 50 * MAX_RANK_PAGE   MAX 10
+
+MAX_RANK_PAGE = 10  # 50 * MAX_RANK_PAGE   MAX 10
 MAX_EACH_PAGE = 1  # MAX_EACH_PAGE/50     MAX 50
 MAX_MANY_IMAGE_COUNT = 5  # 多图中抓取数
 DOWNLOAD_PATH = 'd:\pixiv\demo4'  # 图片存放地址
 GIF_DOWNLOAD_PATH = 'd:\pixiv\gif'  # 动图存放地址
 
 THREAD_COUNT = 20  # 线程数
+POOL_MAXSIZE = 20*20
 TIMEOUT = 10  # 最好都设置，不然有可能程序无响应
 URL_QUEUE = queue.Queue()
 re_filename = re.compile('(\d+)')
+
+logging.basicConfig(level=logging.INFO)
 
 MODE_LIST = {
     '1': 'daily',
@@ -98,6 +103,8 @@ def loginPixiv():
     password = input('请输入密码: ')
     # 获取session实例
     p = requests.Session()
+    # 多线程下pool_maxsize 小于你的线程值
+    p.mount('https://', requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=POOL_MAXSIZE))
     # 获取post请求必要数据
     p.headers = headers
     r = p.get(url='https://accounts.pixiv.net/login', headers=headers, timeout=TIMEOUT)
@@ -108,13 +115,13 @@ def loginPixiv():
     data['password'] = password
 
     # post请求模拟登陆
-    print('模拟登陆开始......')
+    logging.info('模拟登陆开始......')
     try:
         p.post(url='https://accounts.pixiv.net/api/login', data=data, timeout=TIMEOUT)
-        print('模拟登陆成功......')
+        logging.info('模拟登陆成功......')
         return p
     except:
-        print('模拟登陆失败......')
+        logging.warning('模拟登陆失败......')
         raise
 
 
@@ -128,7 +135,7 @@ def getCrawlUrl():
         elif content_input == '3':
             mode_input = input('请选择你感兴趣的(输入对应数字即可): 1 今日,2 本周 >>>>>>')
         else:
-            print('请正确输入!!!')
+            logging.warning('请正确输入!!!')
             continue
         date = input('请输入日期:  例如20170101 -----------  ')
         today = datetime.strftime(datetime.date(datetime.now()), '%Y%m%d')
@@ -144,7 +151,7 @@ def getCrawlUrl():
                     url_list.append('https://www.pixiv.net/ranking.php?mode=%s&content=%s&date=%s&p=%s' % (mode, content, date, i + 1))
             return url_list
         else:
-            print('输入日期必须早于当前日期!!!!')
+            logging.warning('输入日期必须早于当前日期!!!!')
 
 
 # 动图URL收集
@@ -156,7 +163,7 @@ def collectGifUrl(image_src, image_id, login):
         image_name = image_id + '.zip'
         image_url = gif_url
     else:
-        print('无法找到该动图!!!')
+        logging.warning('无法找到该动图!!!')
 
     return image_name, image_url
 
@@ -178,7 +185,7 @@ def collectImageUrl(dom, image_src, image_id, login):
             image_name = image_id + '.png'
             image_url = image_png_url
         else:
-            print('无法找到该图片!!!')
+            logging.warning('无法找到该图片!!!')
     # 多张图
     else:
         image_count = dom.find(class_='page-count').span.text
@@ -199,7 +206,7 @@ def collectImageUrl(dom, image_src, image_id, login):
                 image_name = image_id + '.png'.replace('.', '-' + str(j) + '.')
                 image_url = image_png_url
             else:
-                print('无法找到该图片!!!')
+                logging.warning('无法找到该图片!!!')
 
     return image_name, image_url
 
@@ -207,7 +214,7 @@ def collectImageUrl(dom, image_src, image_id, login):
 def downLoad(login):
     while not URL_QUEUE.empty():
         file, ref, url = URL_QUEUE.get()
-        print('%s   %s   %s' % (file, ref, url))
+        logging.info('%s   %s   %s' % (file, ref, url))
         file_downloader.downloader(login, url, THREAD_COUNT, file, ref).run()
         URL_QUEUE.task_done()
 
@@ -219,7 +226,7 @@ def getReadyCrawlUrl(login):
         try:
             result = login.get(url=url, headers=headers, timeout=TIMEOUT)
         except Exception as e:
-            print(e)
+            logging.exception(e)
             raise
         # 获取我们分析的主要的DOM节点信息
         soup = BeautifulSoup(result.text, "html.parser")
@@ -233,13 +240,17 @@ def getReadyCrawlUrl(login):
             print(image_src)
             headers['Referer'] = referer_url
             if getImageType(image_src) == 'image':
-                co = collectImageUrl(curr_dom, image_src, image_id, login)
+                try:
+                    co = collectImageUrl(curr_dom, image_src, image_id, login)
+                except Exception as e:
+                    logging.exception(e)
+                    continue
                 if co[0] != '' and co[1] != '':
                     image_path = os.path.join(path, co[0])
                     if not isImageExist(image_path):
                         URL_QUEUE.put([image_path, referer_url, co[1]])
                     else:
-                        print('图片已存在')
+                        logging.warning('图片已存在')
                         continue
             elif getImageType(image_src) == 'gif':
                 co = collectGifUrl(image_src, image_id, login)
@@ -248,10 +259,10 @@ def getReadyCrawlUrl(login):
                     if not isImageExist(image_path):
                         URL_QUEUE.put([image_path, referer_url, co[1]])
                     else:
-                        print('动图已存在')
+                        logging.warning('动图已存在')
                         continue
             else:
-                print('暂时不支持此类型！！')
+                logging.warning('暂时不支持此类型！！')
 
 
 def do(login):
@@ -271,7 +282,7 @@ def do(login):
 
     use = (datetime.now() - s).seconds
     size = getDirSize()
-    print('总计用时 %d 秒，平均下载速度 %d KB/S' % (use, size / use / 1024))
+    logging.info('总计用时 %d 秒，平均下载速度 %d KB/S' % (use, size / use / 1024))
 
 
 if __name__ == '__main__':
