@@ -8,17 +8,17 @@ import queue
 import threading
 import logging
 
-MAX_RANK_PAGE = 10  # 排行榜页数 最多10页
-MAX_EACH_PAGE = 1  # 每页图片数 最多50张
-MAX_MANY_IMAGE_COUNT = 5  # 多图中抓取数
+MAX_RANK_PAGE = 10                  # 排行榜页数 最多10页
+MAX_EACH_PAGE = 1                   # 每页图片数 最多50张
+MAX_MANY_IMAGE_COUNT = 5            # 多图中抓取数
 GIF_DOWNLOAD_PATH = 'd:\pixiv\gif'  # 动图存放地址
 
 today = datetime.strftime(datetime.date(datetime.now()), '%Y%m%d')
 DOWNLOAD_PATH = os.path.join('d:\pixiv', today)
-THREAD_COUNT = 20  # 线程数
-POOL_MAXSIZE = 20 * 20  # 下载线程数和单图下载线程数 20*20
-TIMEOUT = 10  # 连接超时时间 最好都设置，不然有可能程序无响应
-URL_QUEUE = queue.Queue()  # 图片URL队列
+THREAD_COUNT = 20                   # 线程数
+POOL_MAXSIZE = 20 * 20              # 下载线程数和单图下载线程数 20*20
+TIMEOUT = 10                        # 连接超时时间 最好都设置，不然有可能程序无响应
+URL_QUEUE = queue.Queue()           # 图片URL队列
 re_filename = re.compile('(\d+)')
 
 logging.basicConfig(level=logging.INFO)
