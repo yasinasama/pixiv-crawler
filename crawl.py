@@ -1,4 +1,4 @@
-import requests,requests.adapters
+import requests, requests.adapters
 from bs4 import BeautifulSoup
 import re
 import os
@@ -8,22 +8,30 @@ import queue
 import threading
 import logging
 
-
-MAX_RANK_PAGE = 10  # 50 * MAX_RANK_PAGE   MAX 10
-MAX_EACH_PAGE = 1  # MAX_EACH_PAGE/50     MAX 50
+MAX_RANK_PAGE = 10  # 排行榜页数 最多10页
+MAX_EACH_PAGE = 1  # 每页图片数 最多50张
 MAX_MANY_IMAGE_COUNT = 5  # 多图中抓取数
 GIF_DOWNLOAD_PATH = 'd:\pixiv\gif'  # 动图存放地址
 
 today = datetime.strftime(datetime.date(datetime.now()), '%Y%m%d')
-DOWNLOAD_PATH = os.path.join('d:\pixiv',today)
+DOWNLOAD_PATH = os.path.join('d:\pixiv', today)
 THREAD_COUNT = 20  # 线程数
-POOL_MAXSIZE = 20*20
-TIMEOUT = 10  # 最好都设置，不然有可能程序无响应
-URL_QUEUE = queue.Queue()
+POOL_MAXSIZE = 20 * 20  # 下载线程数和单图下载线程数 20*20
+TIMEOUT = 10  # 连接超时时间 最好都设置，不然有可能程序无响应
+URL_QUEUE = queue.Queue()  # 图片URL队列
 re_filename = re.compile('(\d+)')
 
 logging.basicConfig(level=logging.INFO)
-
+# 排行榜模式
+# --------------------------
+# daily    每日
+# weekly   每周
+# monthly  每月
+# rookie   新人
+# original 原创
+# male     受男性喜欢
+# female   受女性喜欢
+# ------------------------------------
 MODE_LIST = {
     '1': 'daily',
     '2': 'weekly',
@@ -33,26 +41,31 @@ MODE_LIST = {
     '6': 'male',
     '7': 'female'
 }
-
+# 下载图片类型
+# --------------------------
+# ''         综合
+# illust     插画
+# ugoira     动图
+# ------------------------------------
 CONTENT_LIST = {
     '1': '',  # 综合
     '2': 'illust',  # 插画
     '3': 'ugoira',  # 动图
 }
-# Referer防盗链
-# Range断点获取响应内容
+# Referer   防盗链
+# Range     断点获取响应内容
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.109 Safari/537.36',
     'Referer': '',
     'Range': ''
 }
-
+# get参数
 param = {
     'mode': '',
     'date': '',
     'content': ''
 }
-# post请求内容
+# post参数
 data = {
     'pixiv_id': '',
     'password': '',
@@ -65,7 +78,7 @@ data = {
 }
 
 
-# 文件夹大小
+# 获取当前下载文件文件夹大小
 def getDirSize():
     dir_size = 0
     for i in os.listdir(DOWNLOAD_PATH):
@@ -73,7 +86,7 @@ def getDirSize():
     return dir_size
 
 
-# 文件保存路径
+# 获取下载文件保存路径
 def getdownloadPath(path):
     if not os.path.exists(path):
         os.mkdir(path)
@@ -90,7 +103,7 @@ def isSingleImage(imgdom):
     return False if imgdom.find(class_='page-count') else True
 
 
-# 图片 OR GIF
+# 图片 GIF？
 def getImageType(image_src):
     if image_src.find('_p0') > 0:
         return 'image'
@@ -98,7 +111,7 @@ def getImageType(image_src):
         return 'gif'
 
 
-# 登录
+# 处理登录 返回登录session
 def loginPixiv():
     pixiv_id = input('请输入账号: ')
     password = input('请输入密码: ')
@@ -126,6 +139,7 @@ def loginPixiv():
         raise
 
 
+# 获取用户指定下载页面URL
 def getCrawlUrl():
     while True:
         content_input = input('请选择你感兴趣的内容(输入对应数字即可): 1 综合,2 插画,3 动图 >>>>>')
@@ -190,10 +204,8 @@ def collectImageUrl(dom, image_src, image_id, login):
     else:
         image_count = dom.find(class_='page-count').span.text
         for j in range(int(image_count)):
-            # 暂时不需要下载太多---------------------------------------------------------------
             if j > MAX_MANY_IMAGE_COUNT:
                 break
-
             p = '_p' + str(j) + '_'
             image_jpg_url = image_src.replace(r'c/240x480/', '').replace('_p0_', p)
             image_png_url = image_jpg_url.replace('jpg', 'png')
@@ -211,6 +223,7 @@ def collectImageUrl(dom, image_src, image_id, login):
     return image_name, image_url
 
 
+# 多线程下载图片（队列消费）
 def downLoad(login):
     while not URL_QUEUE.empty():
         file, ref, url = URL_QUEUE.get()
@@ -219,6 +232,7 @@ def downLoad(login):
         URL_QUEUE.task_done()
 
 
+# 获取待下载图片（高清大图-0-）URL
 def getReadyCrawlUrl(login):
     s = datetime.now()
     list = getCrawlUrl()
@@ -264,6 +278,8 @@ def getReadyCrawlUrl(login):
                 logging.warning('暂时不支持此类型！！')
     logging.info('总计用时 %d 秒' % (datetime.now() - s).seconds)
 
+
+# do
 def do(login):
     s = datetime.now()
     t = []

@@ -1,6 +1,7 @@
 import threading
 
 
+# 文件断点下载器
 class downloader:
     def __init__(self, login, url, num, filename, referer):
         self.url = url
@@ -12,7 +13,7 @@ class downloader:
         self.total = int(self.login.head(self.url).headers['Content-Length'])
         self.timeout = 10
 
-    def get_range(self):
+    def _get_range(self):
         ranges = []
         offset = int(self.total / self.num)
         for i in range(self.num):
@@ -22,7 +23,7 @@ class downloader:
                 ranges.append((i * offset, (i + 1) * offset - 1))
         return ranges
 
-    def download(self, start, end, f):
+    def _download(self, start, end, f):
         retry = 0
         success = False
         headers = {
@@ -48,9 +49,9 @@ class downloader:
     def run(self):
         fn = open(self.filename, "wb")
         thread_list = []
-        for ran in self.get_range():
+        for ran in self._get_range():
             start, end = ran
-            thread = threading.Thread(target=self.download, args=(start, end, fn))
+            thread = threading.Thread(target=self._download, args=(start, end, fn))
             thread_list.append(thread)
 
         for i in thread_list:
@@ -60,3 +61,4 @@ class downloader:
             i.join()
 
         fn.close()
+
