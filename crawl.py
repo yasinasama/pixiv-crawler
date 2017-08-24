@@ -12,9 +12,10 @@ import logging
 MAX_RANK_PAGE = 10  # 50 * MAX_RANK_PAGE   MAX 10
 MAX_EACH_PAGE = 1  # MAX_EACH_PAGE/50     MAX 50
 MAX_MANY_IMAGE_COUNT = 5  # 多图中抓取数
-DOWNLOAD_PATH = 'd:\pixiv\demo4'  # 图片存放地址
 GIF_DOWNLOAD_PATH = 'd:\pixiv\gif'  # 动图存放地址
 
+today = datetime.strftime(datetime.date(datetime.now()), '%Y%m%d')
+DOWNLOAD_PATH = os.path.join('d:\pixiv',today)
 THREAD_COUNT = 20  # 线程数
 POOL_MAXSIZE = 20*20
 TIMEOUT = 10  # 最好都设置，不然有可能程序无响应
@@ -138,7 +139,6 @@ def getCrawlUrl():
             logging.warning('请正确输入!!!')
             continue
         date = input('请输入日期:  例如20170101 -----------  ')
-        today = datetime.strftime(datetime.date(datetime.now()), '%Y%m%d')
 
         if date < today:
             content = CONTENT_LIST[content_input]
@@ -220,6 +220,7 @@ def downLoad(login):
 
 
 def getReadyCrawlUrl(login):
+    s = datetime.now()
     list = getCrawlUrl()
     path = getdownloadPath(DOWNLOAD_PATH)
     for url in list:
@@ -231,17 +232,15 @@ def getReadyCrawlUrl(login):
         # 获取我们分析的主要的DOM节点信息
         soup = BeautifulSoup(result.text, "html.parser")
         items = soup.find_all(class_='ranking-item')
-        items_length = len(items)
-        for i in range(items_length):
-            curr_dom = items[i]
-            referer_url = 'https://www.pixiv.net' + curr_dom.find(class_='ranking-image-item').a.get('href')
-            image_src = curr_dom.find('img').get('data-src')
+        for i in items:
+            referer_url = 'https://www.pixiv.net' + i.find(class_='ranking-image-item').a.get('href')
+            image_src = i.find('img').get('data-src')
             image_id = re.search(re_filename, referer_url).group()
             print(image_src)
             headers['Referer'] = referer_url
             if getImageType(image_src) == 'image':
                 try:
-                    co = collectImageUrl(curr_dom, image_src, image_id, login)
+                    co = collectImageUrl(i, image_src, image_id, login)
                 except Exception as e:
                     logging.exception(e)
                     continue
@@ -263,7 +262,7 @@ def getReadyCrawlUrl(login):
                         continue
             else:
                 logging.warning('暂时不支持此类型！！')
-
+    logging.info('总计用时 %d 秒' % (datetime.now() - s).seconds)
 
 def do(login):
     s = datetime.now()
