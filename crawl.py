@@ -110,7 +110,6 @@ def getImageType(image_src):
     else:
         return 'gif'
 
-
 # 处理登录 返回登录session
 def loginPixiv():
     pixiv_id = input('请输入账号: ')
