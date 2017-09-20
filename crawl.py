@@ -1,4 +1,4 @@
-import requests, requests.adapters
+import requests, requests.adapters  # requests[socks]==2.12.0
 from bs4 import BeautifulSoup
 import re
 import os
@@ -20,6 +20,12 @@ POOL_MAXSIZE = 20 * 20              # 下载线程数和单图下载线程数 20
 TIMEOUT = 10                        # 连接超时时间 最好都设置，不然有可能程序无响应
 URL_QUEUE = queue.Queue()           # 图片URL队列
 re_filename = re.compile('(\d+)')
+
+# ShadowSocks 代理访问
+SS_PROXIES = {
+              'http': 'socks5://127.0.0.1:1080',
+              'https': 'socks5://127.0.0.1:1080',
+            }
 
 logging.basicConfig(level=logging.INFO)
 # 排行榜模式
@@ -120,7 +126,7 @@ def loginPixiv():
     p.mount('https://', requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=POOL_MAXSIZE))
     # 获取post请求必要数据
     p.headers = headers
-    r = p.get(url='https://accounts.pixiv.net/login', headers=headers, timeout=TIMEOUT)
+    r = p.get(url='https://accounts.pixiv.net/login', headers=headers, timeout=TIMEOUT,proxies=SS_PROXIES)
     parrern = re.compile(r'name="post_key" value="(.*?)">')
     res = parrern.search(r.text)
     data['post_key'] = res.group()
@@ -130,7 +136,7 @@ def loginPixiv():
     # post请求模拟登陆
     logging.info('模拟登陆开始......')
     try:
-        p.post(url='https://accounts.pixiv.net/api/login', data=data, timeout=TIMEOUT)
+        p.post(url='https://accounts.pixiv.net/api/login', data=data, timeout=TIMEOUT,proxies=SS_PROXIES)
         logging.info('模拟登陆成功......')
         return p
     except:
@@ -188,8 +194,8 @@ def collectImageUrl(dom, image_src, image_id, login):
     if isSingleImage(dom):
         image_jpg_url = image_src.replace(r'c/240x480/img-master', 'img-original').replace('_master1200', '')
         image_png_url = image_jpg_url.replace('jpg', 'png')
-        jpg = login.head(url=image_jpg_url, headers=headers, timeout=TIMEOUT)
-        png = login.head(url=image_png_url, headers=headers, timeout=TIMEOUT)
+        jpg = login.head(url=image_jpg_url, headers=headers, timeout=TIMEOUT,proxies=SS_PROXIES)
+        png = login.head(url=image_png_url, headers=headers, timeout=TIMEOUT,proxies=SS_PROXIES)
         if jpg.status_code == 200:
             image_name = image_id + '.jpg'
             image_url = image_jpg_url
@@ -208,8 +214,8 @@ def collectImageUrl(dom, image_src, image_id, login):
             p = '_p' + str(j) + '_'
             image_jpg_url = image_src.replace(r'c/240x480/', '').replace('_p0_', p)
             image_png_url = image_jpg_url.replace('jpg', 'png')
-            jpg = login.head(url=image_jpg_url, headers=headers, timeout=TIMEOUT)
-            png = login.head(url=image_png_url, headers=headers, timeout=TIMEOUT)
+            jpg = login.head(url=image_jpg_url, headers=headers, timeout=TIMEOUT,proxies=SS_PROXIES)
+            png = login.head(url=image_png_url, headers=headers, timeout=TIMEOUT,proxies=SS_PROXIES)
             if jpg.status_code == 200:
                 image_name = image_id + '.jpg'.replace('.', '-' + str(j) + '.')
                 image_url = image_jpg_url
@@ -238,7 +244,7 @@ def getReadyCrawlUrl(login):
     path = getdownloadPath(DOWNLOAD_PATH)
     for url in list:
         try:
-            result = login.get(url=url, headers=headers, timeout=TIMEOUT)
+            result = login.get(url=url, headers=headers, timeout=TIMEOUT,proxies=SS_PROXIES)
         except Exception as e:
             logging.exception(e)
             raise

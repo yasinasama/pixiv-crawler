@@ -12,6 +12,10 @@ class downloader:
         self.referer = referer
         self.total = int(self.login.head(self.url).headers['Content-Length'])
         self.timeout = 10
+        self.proxies = {
+              'http': 'socks5://127.0.0.1:1080',
+              'https': 'socks5://127.0.0.1:1080',
+            }
 
     def _get_range(self):
         ranges = []
@@ -33,7 +37,7 @@ class downloader:
         }
         while retry < 5 and not success:
             try:
-                res = self.login.get(self.url, headers=headers,timeout=self.timeout)
+                res = self.login.get(self.url, headers=headers,timeout=self.timeout,proxies=self.proxies)
                 success = True
             except Exception as e:
                 print(e)
