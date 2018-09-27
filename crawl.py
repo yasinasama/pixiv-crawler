@@ -8,6 +8,7 @@ import queue
 import threading
 import logging
 
+
 MAX_RANK_PAGE = 10                  # 排行榜页数 最多10页
 MAX_EACH_PAGE = 1                   # 每页图片数 最多50张
 MAX_MANY_IMAGE_COUNT = 5            # 多图中抓取数
